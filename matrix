@@ -1,0 +1,468 @@
+#!/bin/bash
+#######################################################################################
+#Program name: Matrix
+#Name: Helen Jiang
+#Date: 1/27/19
+#Class: CS344
+#Description: Script written to perform matrix calculations
+#		- given a matrix, program will return it's dimensions in rows by cols
+#		- given a matrix, program will transpose it 
+#		- given a matrix, program will return the mean for each column
+#		- given two matrices, program will add them together
+#		- given two matrices, program will perform matrix multiplication 
+#######################################################################################
+
+
+
+
+#######################################################################################
+#removes all files that matches tempfile or datafile
+#######################################################################################
+function removeTempFiles(){
+	#remove all files that end with the shell's process ID
+	rm -f *tempfile*
+	rm -f *datafile*
+}
+
+#######################################################################################
+#function dataValAdd: recieves parameters passed in from command line, starting from $2
+#function does input validation for add function
+#will return error if the arugments are not 2, the files are unreadable and the matrices have different dimensions 
+#calls dims to get the dimensions of the two matrices
+#######################################################################################
+function dataValAdd(){
+	#make sure argument count is 2
+	#make sure both files are readable
+	#if either of these are false, return error message to stderr
+	if [ ! "$#" = "2" ];then
+		echo "invalid arguments 1" >&2
+		exit 5
+	elif [[ ! -r $1 ]] || [[ ! -r $2 ]]; then
+		echo "invalid arguments 2" >&2
+		exit 5
+	fi
+	
+	#check if left matrix and right matrix have the same dimensions
+	#make two strings to store the dims of each matrix
+	#compare to make sure the two strings are the same 
+	tempstring1=""
+	tempstring2=""
+	tempstring1=$(dims $1)
+	tempstring2=$(dims $2)
+
+	if [[ "$tempstring1" != "$tempstring2" ]]; then
+		echo "invalid dims for add" >&2
+		exit 5
+	fi
+
+}
+
+#######################################################################################
+#function dataValMul: receives parameters passed in from command line, starting from $2
+#function does input validation for mul function
+#will return error if the argumements are not 2, the files are unreadable and the matrices are not compatible for multiplication 
+#calls dims to get the dimensions of the two matrices 
+#######################################################################################
+function dataValMul(){
+	#make sure argument count is 2
+	#make sure both files are readable
+	if [ ! "$#" = "2" ];then
+		echo "invalid arguemnts 4" >&2
+		exit 5
+	elif [[ ! -r $1 ]] || [[ ! -r $2 ]];then
+		echo "invalid arguments 5" >&2
+		exit 5
+	fi
+
+	
+	#make sure m1's dims = M x N and m2's dims = N x P
+	#we make two temp strings and save the dims of the two arrays into them
+	#We take the row of m1 and col of m2 and compare
+	#if they are the same, then the test passes; else they are not compatible for multiplication
+	tempstring1=""
+	tempstring2=""
+	tempstring1=$(dims $1)
+	tempstring2=$(dims $2)
+	#to get the cols for M1, get the last number in the file
+	for i in $tempstring1
+	do
+		n1=$i
+	done
+
+	#to get the rows for M2, get the first number in the file
+	for i in $tempstring2
+	do
+		n2=$i
+		break
+	done
+	if (( n1 != n2 ));then
+		echo "invalid dimensions for mul" >&2
+		exit 5
+	fi
+
+
+}
+
+#######################################################################################
+#function dataValidation: receives parameters passed in from command line, starting at $2
+#function does input validation for dims, transpose and mean
+#if the input # is 0, read from cat and store the data into a tempfile called datapathfile
+#if the input is 1 and the file is readable, then save the argument into datafilepath
+#if both of those above are false, function will return error
+#######################################################################################
+function dataValidation(){
+	datafilepath="datafile$$"
+	#if there are 0 arguements, then the input must be coming in from stdin
+	if [ "$#" = "0" ];then
+		cat > "$datafilepath"
+	#if there is 1 argument and the file is readable, then input is acceptable and save it to datafilepath
+	elif [ "$#" = "1" ] && [[ -r $1 ]]; then
+		datafilepath=$1
+	else
+		echo "invalid arguments 3" >&2
+		exit 5
+	fi
+}
+
+#######################################################################################
+#functions dims: returns the dimensions of the matrix by storing the # of rows and # of cols into stdout
+#calls dataValidation to validate inputs
+#######################################################################################
+function dims(){
+	#check for input validity by checking first for number of arguments and then readability of file
+	dataValidation "$@"
+	#set col and row for # of cols and rows in the matrix	
+	col=0
+	row=0
+	
+	#read first line and then count the # of #s in first line to get # of cols
+	read firstline < $datafilepath
+	for i in $firstline
+	do
+		((col++))
+	done	
+	
+	#for each time a line is read, that is the number of rows
+	while read lines 
+	do
+		((row++))
+	done < $datafilepath
+	
+	#display results to stdout
+	echo "$row $col" >&1
+}
+
+#######################################################################################
+#function transpose: returns the matrix, transposed, that is row into col and col into row
+#transposed result is stored into a file pointed by stdout
+#calls dataValidation to validate inputs
+#calls removeTempFiles to delete any temp files used 
+#######################################################################################
+function transpose(){
+	#call dataValidation to make sure argument numbers and files are valid
+	dataValidation "$@"
+	#set counter for # of cols and temp filed named with process ID
+	counter=0
+	temp="tempfile1$$"
+	
+	#read the first line so we know how many cols there are
+	read firstline < $datafilepath
+	
+	#for each row, read the #, make it into a newRow by changing newline to tab
+	for i in $firstline
+	do
+		#counter set so cut knows which col to read from 
+		((counter++))
+		#for each col that is cut, take those results and pipe it to tr which will change all newlines to tab characters 
+		newRow=$(cut -f $counter $datafilepath | tr '\n' '\t') 
+		#remove the last character from newRow; newRow sees \t as an escape and thus as one character combined
+		newRow=${newRow%?}
+		#save new time into temp as a new row
+		echo "${newRow}" >> $temp
+	done 
+	
+	#cat $temp to whereever stdout is pointing to 
+	cat $temp >&1
+	#trap "rm -f $temp; echo 'SIGNINT received: Deleting temp file then exiting!'; exit 1" INT
+}
+
+#######################################################################################
+#function mean:  returns the matrix mean for each col
+#result is stored into a file pointed by stdout
+#calls dataValidation to validate inputs
+#calls removeTempFiles to delete any temp files used 
+#######################################################################################
+function mean(){
+	#call dataValidation to make sure argument numbers and files are valid
+	dataValidation "$@"
+	
+	#col, row, sum, avg and temp filed named with process ID
+	col=0
+	row=0
+	sum=0
+	avg=0
+	temp="tempfile2$$"
+	#for each time a line is read, that is the number of rows
+	#the number of rows is needed to calculate the average 
+	while read lines 
+        do
+		((row++))
+        done < $datafilepath
+	#create an empty string to store the average numbers, followed by a tab
+	newString="";	
+
+	#read the first line and store it inside variable first line
+	read firstline < $datafilepath
+	# for each number in firstline, we sum up all the numbers in that col and divide by rows to get average
+	for i in $firstline
+	do
+		#keep a col counter so cut knows which col to read from 
+		((col++))
+		# save all the numbers in that col in a variable called oneRow
+		oneRow=$(cut -f $col $datafilepath | tr '\n' '\t')
+		# for each number in oneRow, add it to the sum to get total sum 
+		for j in $oneRow
+		do
+			sum=$((sum+j))
+		done
+		#calculate average
+		#formula to calculate average: (a + (b/2)*((a>0)*2-1))/b	
+		if ((sum >0));then
+			tmpvar=1
+		else
+			tmpvar=0
+		fi
+		tmpvar=$(((tmpvar*2)-1))
+		tmpvar=$((sum + (row/2) * tmpvar))
+		avg=$((tmpvar/row))
+		
+		#for each average that is calculcated for the col, we add it to new string, followed by \t 
+		newString="${newString}${avg}\t";
+
+		#reset sum and avg so new numbers for the next col can be calculated 
+		sum=0
+		avg=0
+	done
+	#newString recongizes \t as two characters so we need to delete the last character two times
+	newString=${newString%?}	
+	echo -e "${newString%?}" > $temp
+	
+	#cat the temp file to wherever stdout is pointing 
+	cat $temp >&1
+	
+	#call function to remove all tempfiles
+	removeTempFiles
+}
+
+#######################################################################################
+#function add: each m1 and m2 together to make a new matrix
+#added result is stored into a file pointed by stdout
+#calls dataValAdd to validate inputs
+#calls removeTempFiles to delete any temp files used 
+#######################################################################################
+function add(){
+	dataValAdd "$@"
+	#declare a counter for the number of cols and a temporary file to store the new numbers
+	col=0;
+	temp="tempfile3$$"
+	#create an exmpty array to store the numbers read from m1 and m2 
+	array=()
+	newLine=""
+	#read one line from $1 and one line from $2 at the same time
+	while read line1 <&3 && read line2 <&4
+	do
+		
+		#we save each number from line1 into an array and keep a col counter to be used as the index number
+		for i in $line1
+		do
+			array[$col]=$i
+			((col++))
+		done
+		#reset col so it can be used for line2
+		col=0
+		#we add each number from line2 to the number in line1 stored in array 
+		#increment counter so we know the number of cols in the matrix
+		for j in $line2
+		do
+			array[$col]=$((array[$col]+j))
+			((col++))
+		done
+	
+		#now that we have the sum stored in array, we are going to store the numbers to a newLine string
+		#we add the string to itself, followed by the new number and \t
+		for (( k=0; k < col; k=k+1 ))
+		do	
+			newLine="${newLine}${array[$k]}\t"
+		done
+
+		#since a string recognizes \t as two characters, delete the last two characters twice
+		#we echo the new line of matrix into a temp file
+		newLine=${newLine%?}
+		echo -e "${newLine%?}" >>$temp
+		#reset all variables to get ready for the next lines to be read 
+		col=0
+		newLine=""
+		unset array
+		array=()
+	done 3<$1 4<$2
+	#after all lines have been writted to temp, cat the file to stdout
+	cat $temp >&1
+	#call function to remove any tempfiles 
+	removeTempFiles
+}
+
+
+#######################################################################################
+#function multiply: multiplies two given matrices and stores it in matrix form to stdout
+#calls dataValMul to make sure dimensions are compatible, files are valid and arguement number is 2
+#first, get dimensions of each file and store into their respective variables
+#store all the numbers for each matrix into their own array
+#perform matrix multiplication and save each sum into a newline
+#newline variable is saved into a tempfile for each newline
+#cat the file into stdout
+#######################################################################################
+function multiply(){
+	#perform data validation for multiplication
+	dataValMul "$@"
+
+	
+	#get dimensions for each matrix
+	#make two temp files to store the results from dims 
+	dimsM1="tempfile4$$"
+	dimsM2="tempfile5$$"
+	#call dims to save results into their temp files 
+	dims $1 >$dimsM1
+	dims $2 >$dimsM2
+	#make two variables to transpose all spaces into tabs
+	dimsM11=$(cat $dimsM1 | tr " " '\t')  
+	dimsM22=$(cat $dimsM2 | tr " " '\t') 
+	#echo the transposed variables back into the temp files
+	echo "$dimsM11" >$dimsM1
+	echo "$dimsM22" >$dimsM2
+	#cut from the files to get their respective dimensions and save into variables
+	rowM1=$(cut -f 1 $dimsM1)
+	rowM2=$(cut -f 1 $dimsM2)
+	colM1=$(cut -f 2 $dimsM1)
+	colM2=$(cut -f 2 $dimsM2)
+	
+	#make variables to keep track of where from the array to grab data from
+        #starting rows and cols start from 0
+	startRowM1=0
+	startRowM2=0
+	startColM1=0
+	startColM2=0
+		
+	#ending variables for array
+        #endRows end at the number of cols for each matrix because of how matrices are multiplied
+	endRowM1=$colM1
+	endRowM2=$colM2
+	#endCols end at the number of rows for each matrix because of how matrices are multiplied
+	endColM1=$rowM1
+	endColM2=$rowM2
+	#totalNum1 and 2 keep track of the total number of elements in the matrices
+	totalNum1=0
+	totalNum2=0
+	#sum stores the results of matrix multiplication
+	sum=0
+	
+
+	#put M1 into array1 and increment totalNum1 for each array element
+	while read line
+	do
+		for i in $line
+		do
+			array1[$totalNum1]=$i
+			(( totalNum1++ ))
+		done
+	
+	done <$1
+	#we need to transpose matrix two because we are multiplying M1's row by M2's col, so turning col into row to make accessing the array elements easier
+        #transpose M2 by calling transpose function and storing it into a tempfile
+	transM2="tempfile6$$"
+	transpose $2 >$transM2
+	#read from tempfile and put M2 into array2 and increment totalNum2 for each array element
+	while read line
+	do
+		for i in $line
+		do
+			array2[$totalNum2]=$i
+			(( totalNum2++ ))
+		done
+	done <$transM2
+
+
+
+	#start the actual multiplication part
+        #make a temp file to store the results of the matrix multiplication	
+	tempfile1="tempfile7$$"
+	 #newLine stores the results of the multiplication for each row
+	newLine=""
+	#array3 stores the product before the addition
+	array3=()
+
+	##############################################################################
+        #idea is: take each row of M1, multiply by each col of M2;
+        #after one row has been multiplied by every col in M2, move onto new col in M1
+        #############################################################################
+
+        #take every row of M1 and
+        #keep multiplying until endRowM1 is at the end of the array1
+	while (( endRowM1<=totalNum1 ))
+	do	
+
+		#take every row of M1 and multiply by every col of M2
+                #keep multiplying until endColM2 is at the end of array2
+		while (( endColM2<=totalNum2 )) 
+		do
+			#keeping track of three variables, i for M1, j for M2 and k for array3
+                        #i starts at startRowM1 and end at endRowM1
+                        #j starts at startColM2 and end at endColM2
+                        #k starts at 0 and ends at colM1
+			for (( i=startRowM1, j=startColM2, k=0; i<endRowM1 && j <endColM2 && k<colM1; i++, j++, k++ ))
+			do
+				#take each matching array element, multiply them and store into array3	
+				array3[$k]=$(( array1[i]*array2[j] ))
+
+			done
+			#sum the elements in the array; should reset each loop to produce one sum
+			for (( i=0; i<colM1; i++ ))
+			do
+				sum=$(( sum + array3[i] ))
+			done	
+			
+			#store sum into newLine
+			newLine="${newLine}$sum\t"
+			#increment startColM2 and endcolM2 by the number of rows in M2
+			startColM2=$(( startColM2+rowM2 ))
+			endColM2=$(( endColM2+rowM2 ))
+			#reset sum
+			sum=0
+
+			#once each row of M1 has finished multiplying all the cols in M2, save the whole newLine into tempfile1
+			if (( endColM2 > totalNum2 )); then
+				#once again, we have to get rid of the last two characters in the line beacuse of \t
+				newLine=${newLine%?}
+				echo -e "${newLine%?}" >>$tempfile1
+				#reset newLine for the new row in M1
+				newLine=""
+			fi
+		done
+
+		#increment startRowM1 and endRowM1 by the number of cols in M1
+		startRowM1=$(( startRowM1+colM1 ))
+		endRowM1=$(( endRowM1+colM1 ))
+		
+		#reset the cols and sum
+		startColM2=0
+		endColM2=$rowM2
+		sum=0
+	done
+
+	cat $tempfile1 >&1
+	removeTempFiles
+}
+
+#calls the function named by argument 1, with remaining arguments passed to it
+$1 "${@:2}"
+
+
